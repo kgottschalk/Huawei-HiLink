@@ -12,7 +12,9 @@
  *
  * functionality tested with Huawei E303
  * Link: http://www.huaweidevices.de/e303
- **/
+ *
+ * KG: functionality tested with Huawei E3372
+**/
 namespace AMWD;
 
 @error_reporting(0);
@@ -25,12 +27,12 @@ function_exists('simplexml_load_string') or die('simplexml needed'.PHP_EOL);
 
 class HiLink {
 	// Class Attributes
-	private $host, $ipcheck;
+	private $host, $ipcheck, $session, $token;
 
 	public $trafficStats, $monitor, $device;
 
 	public function __construct() {
-		$this->setHost('192.168.1.1');
+		$this->setHost('192.168.8.1');
 		$this->setIpCheck('http://dev.am-wd.de/ip.php');
 	}
 
@@ -71,8 +73,8 @@ class HiLink {
 				$cmd = "ping -n 1 -w ".($timeout * 100)." ".$server;
 				break;
 			case "mac":
-			$cmd = "ping -c 1 -t ".$timeout." ".$server." 2> /dev/null";
-			break;
+				$cmd = "ping -c 1 -t ".$timeout." ".$server." 2> /dev/null";
+				break;
 			case "lnx":
 				$cmd = "ping -c 1 -W ".$timeout." ".$server." 2> /dev/null";
 				break;
@@ -82,14 +84,13 @@ class HiLink {
 		$res = exec($cmd, $out, $ret);
 
 		if ($ret == 0) {
-			$ch = curl_init('http://'.$server.'/html/index.html');
-			curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+			$ch = $this->our_curl_init('http://'.$server.'/html/index.html');
 			$res = curl_exec($ch);
 			curl_close($ch);
 
-			return (strstr($res, 'hilink')) ? true : false;
+			if (strstr($res, 'hilink'))
+				return true;
 		}
-
 		return false;
 	}
 
@@ -118,8 +119,7 @@ class HiLink {
 			return $stats;
 		}
 
-		$ch = curl_init($this->host.'/api/monitoring/traffic-statistics');
-		curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+		$ch = $this->our_curl_init($this->host.'/api/monitoring/traffic-statistics',null,false);
 		$res = curl_exec($ch);
 		curl_close($ch);
 
@@ -209,13 +209,13 @@ class HiLink {
 	}
 
 	public function resetTrafficStats() {
-		$ch = curl_init($this->host.'/api/monitoring/clear-traffic');
-		$opts = array(
-			CURLOPT_RETURNTRANSFER => 1,
-			CURLOPT_POST => 1,
-			CURLOPT_POSTFIELDS => "<request><ClearTraffic>1</ClearTraffic></request>"
+		$ch = $this->our_curl_init(
+			$this->host.'/api/monitoring/clear-traffic',
+			array(
+				CURLOPT_POST => 1,
+				CURLOPT_POSTFIELDS => "<request><ClearTraffic>1</ClearTraffic></request>",
+			)
 		);
-		curl_setopt_array($ch, $opts);
 		$ret = curl_exec($ch);
 		curl_close($ch);
 
@@ -226,8 +226,7 @@ class HiLink {
 	/* --- Provider
 	--------------- */
 	public function getProvider($length = 'full') {
-		$ch = curl_init($this->host.'/api/net/current-plmn');
-		curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+		$ch = $this->our_curl_init($this->host.'/api/net/current-plmn');
 		$ret = curl_exec($ch);
 		curl_close($ch);
 		$res = simplexml_load_string($ret);
@@ -247,8 +246,7 @@ class HiLink {
 			return $monitor;
 		}
 
-		$ch = curl_init($this->host.'/api/monitoring/status');
-		curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+		$ch = $this->our_curl_init($this->host.'/api/monitoring/status');
 		$res = curl_exec($ch);
 		curl_close($ch);
 
@@ -310,13 +308,13 @@ class HiLink {
 		}
 		$req->addChild('NetworkBand', $band);
 
-		$ch = curl_init($this->host.'/api/net/network');
-		$opts = array(
-			CURLOPT_RETURNTRANSFER => 1,
-			CURLOPT_POST => 1,
-			CURLOPT_POSTFIELDS => $req->asXML(),
+		$ch = $this->our_curl_init(
+			$this->host.'/api/net/network',
+			array(
+				CURLOPT_POST => 1,
+				CURLOPT_POSTFIELDS => $req->asXML(),
+			)
 		);
-		curl_setopt_array($ch, $opts);
 		$ret = curl_exec($ch);
 		curl_close($ch);
 
@@ -398,8 +396,7 @@ class HiLink {
 	/* --- PIN actions
 	------------------ */
 	public function getPin() {
-		$ch = curl_init($this->host.'/api/pin/status');
-		curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+		$ch = $this->our_curl_init($this->host.'/api/pin/status');
 		$ret = curl_exec($ch);
 		curl_close($ch);
 
@@ -414,13 +411,13 @@ class HiLink {
 		$req->addChild('NewPin', $new);
 		$req->addChild('PukCode', $puk);
 
-		$ch = curl_init($this->host.'/api/pin/operate');
-		$opts = array(
-			CURLOPT_RETURNTRANSFER => 1,
-			CURLOPT_POST => 1,
-			CURLOPT_POSTFIELDS => $req->asXML(),
+		$ch = $this->our_curl_init(
+			$this->host.'/api/pin/operate',
+			array(
+				CURLOPT_POST => 1,
+				CURLOPT_POSTFIELDS => $req->asXML(),
+			)
 		);
-		curl_setopt_array($ch, $opts);
 		$ret = curl_exec($ch);
 		curl_close($ch);
 
@@ -483,13 +480,13 @@ class HiLink {
 		if ($this->isConnected())
 				return true;
 
-		$ch = curl_init($this->host.'/api/dialup/dial');
-		$opts = array(
-			CURLOPT_RETURNTRANSFER => 1,
-			CURLOPT_POST => 1,
-			CURLOPT_POSTFIELDS => "<request><Action>1</Action></request>",
+		$ch = $this->our_curl_init(
+			$this->host.'/api/dialup/dial',
+			array(
+				CURLOPT_POST => 1,
+				CURLOPT_POSTFIELDS => "<request><Action>1</Action></request>",
+			)
 		);
-		curl_setopt_array($ch, $opts);
 		$ret = curl_exec($ch);
 		curl_close($ch);
 
@@ -502,13 +499,13 @@ class HiLink {
 		if (!$this->isConnected())
 				return true;
 
-		$ch = curl_init($this->host.'/api/dialup/dial');
-		$opts = array(
-			CURLOPT_RETURNTRANSFER => 1,
-			CURLOPT_POST => 1,
-			CURLOPT_POSTFIELDS => "<request><Action>0</Action></request>",
+		$ch = $this->our_curl_init(
+			$this->host.'/api/dialup/dial',
+			array(
+				CURLOPT_POST => 1,
+				CURLOPT_POSTFIELDS => "<request><Action>0</Action></request>",
+			)
 		);
-		curl_setopt_array($ch, $opts);
 		$ret = curl_exec($ch);
 		curl_close($ch);
 
@@ -523,8 +520,7 @@ class HiLink {
 	}
 
 	public function getConnection($asArray = false) {
-		$ch = curl_init($this->host.'/api/dialup/connection');
-		curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+		$ch = $this->our_curl_init($this->host.'/api/dialup/connection');
 		$ret = curl_exec($ch);
 		curl_close($ch);
 		$res = simplexml_load_string($ret);
@@ -562,13 +558,13 @@ class HiLink {
 		$req->addChild('MaxIdelTime', $idle);
 		$req->addChild('ConnectMode', $autoconnect);
 
-		$ch = curl_init($this->host.'/api/dialup/connection');
-		$opts = array(
-			CURLOPT_RETURNTRANSFER => 1,
-			CURLOPT_POST => 1,
-			CURLOPT_POSTFIELDS => $req->asXML(),
+		$ch = $this->our_curl_init(
+			$this->host.'/api/dialup/connection',
+			array(
+				CURLOPT_POST => 1,
+				CURLOPT_POSTFIELDS => $req->asXML(),
+			)
 		);
-		curl_setopt_array($ch, $opts);
 		$ret = curl_exec($ch);
 		curl_close($ch);
 
@@ -627,8 +623,7 @@ class HiLink {
 			return $device;
 		}
 
-		$ch = curl_init($this->host.'/api/device/information');
-		curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+		$ch = $this->our_curl_init($this->host.'/api/device/information');
 		$res = curl_exec($ch);
 		curl_close($ch);
 
@@ -736,8 +731,7 @@ class HiLink {
 	/* --- APN
 	---------- */
 	public function getApn() {
-		$ch = curl_init($this->host.'/api/dialup/profiles');
-		curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+		$ch = $this->our_curl_init($this->host.'/api/dialup/profiles');
 		$ret = curl_exec($ch);
 		curl_close($ch);
 
@@ -768,13 +762,13 @@ class HiLink {
 		$p->addChild('SecondaryDns', $secondaryDns);
 		$p->addChild('ReadOnly', 0);
 
-		$ch = curl_init($this->host.'/api/dialup/profiles');
-		$opts = array(
-			CURLOPT_RETURNTRANSFER => 1,
-			CURLOPT_POST => 1,
-			CURLOPT_POSTFIELDS => $req->asXML(),
+		$ch = $this->our_curl_init(
+			$this->host.'/api/dialup/profiles',
+			array(
+				CURLOPT_POST => 1,
+				CURLOPT_POSTFIELDS => $req->asXML(),
+			)
 		);
-		curl_setopt_array($ch, $opts);
 		$ret = curl_exec($ch);
 		curl_close($ch);
 
@@ -806,13 +800,13 @@ class HiLink {
 		$p->addChild('SecondaryDns', $secondaryDns);
 		$p->addChild('ReadOnly', $readOnly);
 
-		$ch = curl_init($this->host.'/api/dialup/profiles');
-		$opts = array(
-			CURLOPT_RETURNTRANSFER => 1,
-			CURLOPT_POST => 1,
-			CURLOPT_POSTFIELDS => $req->asXML(),
+		$ch = $this->our_curl_init(
+			$this->host.'/api/dialup/profiles',
+			array(
+				CURLOPT_POST => 1,
+				CURLOPT_POSTFIELDS => $req->asXML(),
+			)
 		);
-		curl_setopt_array($ch, $opts);
 		$ret = curl_exec($ch);
 		curl_close($ch);
 
@@ -826,13 +820,13 @@ class HiLink {
 		$req->addChild('SetDefault', $idx);
 		$req->addChild('Modify', 0);
 
-		$ch = curl_init($this->host.'/api/dialup/profiles');
-		$opts = array(
-			CURLOPT_RETURNTRANSFER => 1,
-			CURLOPT_POST => 1,
-			CURLOPT_POSTFIELDS => $req->asXML(),
+		$ch = $this->our_curl_init(
+			$this->host.'/api/dialup/profiles',
+			array(
+				CURLOPT_POST => 1,
+				CURLOPT_POSTFIELDS => $req->asXML(),
+			)
 		);
-		curl_setopt_array($ch, $opts);
 		$ret = curl_exec($ch);
 		curl_close($ch);
 
@@ -846,13 +840,13 @@ class HiLink {
 		$req->addChild('SetDefault', 1);
 		$req->addChild('Modify', 0);
 
-		$ch = curl_init($this->host.'/api/dialup/profiles');
-		$opts = array(
-			CURLOPT_RETURNTRANSFER => 1,
-			CURLOPT_POST => 1,
-			CURLOPT_POSTFIELDS => $req->asXML(),
+		$ch = $this->our_curl_init(
+			$this->host.'/api/dialup/profiles',
+			array(
+				CURLOPT_POST => 1,
+				CURLOPT_POSTFIELDS => $req->asXML(),
+			)
 		);
-		curl_setopt_array($ch, $opts);
 		$ret = curl_exec($ch);
 		curl_close($ch);
 
@@ -902,13 +896,14 @@ class HiLink {
 		$req->addChild('Ascending', 0);
 		$req->addChild('UnreadPreferred', $prefUnread);
 
-		$ch = curl_init($this->host.'/api/sms/sms-list');
-		$opts = array(
-			CURLOPT_RETURNTRANSFER => 1,
-			CURLOPT_POST => 1,
-			CURLOPT_POSTFIELDS => $req->asXML(),
+		$ch = $this->our_curl_init(
+			$this->host.'/api/sms/sms-list',
+			array(
+				CURLOPT_POST => 1,
+				CURLOPT_POSTFIELDS => $req->asXML(),
+			),
+			true
 		);
-		curl_setopt_array($ch, $opts);
 		$ret = curl_exec($ch);
 		curl_close($ch);
 
@@ -939,9 +934,10 @@ class HiLink {
 
 		$out = '';
 		foreach ($ret as $l) {
-			$out .= $l['idx'].") ".$l['number']." - ".date('d.m.Y H:i:s').PHP_EOL;
-			$out .= "Read: ".$l['read'].PHP_EOL;
-			$out .= "Nachricht: ".$l['msg'].PHP_EOL;
+			$out .= $l['idx'].") ".$l['number']
+				." - ".date('d.m.Y H:i:s',$l['time'])
+				." - Read: ".($l['read']?'Y':'N')
+				." - Text: ".$l['msg'].PHP_EOL;
 		}
 
 		return $out;
@@ -977,8 +973,7 @@ class HiLink {
 	}
 
 	public function getNotifications() {
-		$ch = curl_init($this->host.'/api/monitoring/check-notifications');
-		curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+		$ch = $this->our_curl_init($this->host.'/api/monitoring/check-notifications',null,true);
 		$ret = curl_exec($ch);
 		curl_close($ch);
 
@@ -996,8 +991,7 @@ class HiLink {
 	}
 
 	public function getSmsCount($box = 'default') {
-		$ch = curl_init($this->host.'/api/sms/sms-count');
-		curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+		$ch = $this->our_curl_init($this->host.'/api/sms/sms-count',null,true);
 		$ret = curl_exec($ch);
 		curl_close($ch);
 
@@ -1047,13 +1041,14 @@ class HiLink {
 			$req->addChild('Index', $idx);
 		}
 
-		$ch = curl_init($this->host.'/api/sms/set-read');
-		$opts = array(
-			CURLOPT_RETURNTRANSFER => 1,
-			CURLOPT_POST => 1,
-			CURLOPT_POSTFIELDS => $req->asXML(),
+		$ch = $this->our_curl_init(
+			$this->host.'/api/sms/set-read',
+			array(
+				CURLOPT_POST => 1,
+				CURLOPT_POSTFIELDS => $req->asXML(),
+			),
+			true
 		);
-		curl_setopt_array($ch, $opts);
 		$ret = curl_exec($ch);
 		curl_close($ch);
 
@@ -1072,13 +1067,14 @@ class HiLink {
 			$req->addChild('Index', $idx);
 		}
 
-		$ch = curl_init($this->host.'/api/sms/delete-sms');
-		$opts = array(
-			CURLOPT_RETURNTRANSFER => 1,
-			CURLOPT_POST => 1,
-			CURLOPT_POSTFIELDS => $req->asXML(),
+		$ch = $this->our_curl_init(
+			$this->host.'/api/sms/delete-sms',
+			array(
+				CURLOPT_POST => 1,
+				CURLOPT_POSTFIELDS => $req->asXML(),
+			),
+			true
 		);
-		curl_setopt_array($ch, $opts);
 		$ret = curl_exec($ch);
 		curl_close($ch);
 
@@ -1108,13 +1104,14 @@ class HiLink {
 
 //		return true;  // backup return to prohibit high costs
 
-		$ch = curl_init($this->host.'/api/sms/send-sms');
-		$opts = array(
-			CURLOPT_RETURNTRANSFER => 1,
-			CURLOPT_POST => 1,
-			CURLOPT_POSTFIELDS => $req->asXML(),
+		$ch = $this->our_curl_init(
+			$this->host.'/api/sms/send-sms',
+			array(
+				CURLOPT_POST => 1,
+				CURLOPT_POSTFIELDS => $req->asXML(),
+			),
+			true
 		);
-		curl_setopt_array($ch, $opts);
 		$ret = curl_exec($ch);
 		curl_close($ch);
 
@@ -1124,8 +1121,7 @@ class HiLink {
 	}
 
 	public function sendSmsStatus() {
-		$ch = curl_init($this->host.'/api/sms/send-status');
-		curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+		$ch = $this->our_curl_init($this->host.'/api/sms/send-status',null,true);
 		$ret = curl_exec($ch);
 		curl_close($ch);
 
@@ -1137,6 +1133,55 @@ class HiLink {
 
 	/* --- HELPER FUNCTIONS
 	----------------------- */
+
+	private function getSesToken() {
+		$ch = curl_init($this->host.'/api/webserver/SesTokInfo');
+		curl_setopt($ch,CURLOPT_RETURNTRANSFER,1);
+		$res = curl_exec($ch);
+		curl_close($ch);
+
+		if ($xml = simplexml_load_string($res)) {
+			$this->session = $xml->SesInfo;
+			$this->token = $xml->TokInfo;
+			return true;
+		}
+		return false;
+	}
+
+	private function getToken() {
+		if ($this->token) 
+			return $this->token;
+
+		if ($this->getSesToken()) 
+			return $this->token;
+
+		return false;
+	}
+
+	private function getSession() {
+		if ($this->session) 
+			return $this->session;
+
+		if ($this->getSesToken())
+			return $this->session;
+
+		return false;
+	}
+
+	private function our_curl_init($url,$opts=null,$addToken=false) {
+		$ch = curl_init($url);
+
+		if (is_array($opts))
+			curl_setopt_array($ch,$opts);
+
+		curl_setopt($ch,CURLOPT_RETURNTRANSFER,1);
+		curl_setopt($ch,CURLOPT_COOKIE,$this->getSession().';');
+		if ($addToken) {
+			curl_setopt($ch,CURLOPT_HTTPHEADER,array('__RequestVerificationToken: '.$this->token));
+		}
+		return $ch;
+	}
+
 	private function getSystem() {
 		if (substr(__DIR__,0,1) == '/') {
 			return (exec('uname') == 'Darwin') ? 'mac' : 'lnx';
