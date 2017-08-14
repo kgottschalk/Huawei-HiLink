@@ -1,21 +1,20 @@
 <?php
-
-/**
+/*
  * hilink.class.php
  *
- * @author Andreas Mueller <webmaster@am-wd.de>
- * @version 1.0-20140703
+ * Author Klaus Gottschalk <klaus@kgem.de>
+ *   based of work of Andreas Mueller <webmaster@am-wd.de> and others - see githup
  *
- * @description
+ * Description:
  * This class tries to fully control an UMTS Stick from Huawei
  * with an HiLink Webinterface
  *
- * functionality tested with Huawei E303
- * Link: http://www.huaweidevices.de/e303
+ * Functionality tested with Huawei E3372
+ * HW Version:   CL2E3372HM
+ * SW Version:   22.315.01.00.1080
+ * UI Version:   17.100.13.02.1080
  *
- * KG: functionality tested with Huawei E3372
-**/
-namespace AMWD;
+ */
 
 @error_reporting(0);
 
@@ -24,10 +23,9 @@ namespace AMWD;
 function_exists('curl_version') or die('cURL Extension needed'.PHP_EOL);
 function_exists('simplexml_load_string') or die('simplexml needed'.PHP_EOL);
 
-
 class HiLink {
 	// Class Attributes
-	private $host, $ipcheck, $session, $token;
+	private $host, $ipcheck, $session, $token, $tokupdt, $PIN_STATUS_CODES, $ERROR_CODES;
 
 	public $trafficStats, $monitor, $device;
 
@@ -291,6 +289,7 @@ class HiLink {
 	// connection type
 	public function getConnectionType() {
 		$mon = $this->getMonitor();
+
 		switch ($mon->CurrentNetworkType) {
 			case "3": return "2G";
 			case "4": return "3G";
@@ -325,7 +324,13 @@ class HiLink {
 	// signal strength
 	public function getSignalStrength() {
 		$mon = $this->getMonitor();
-		return $mon->SignalStrength.'%';
+		if (!empty($mon->SignalStrength))
+			return $mon->SignalStrength.'%';
+
+		if (!empty($mon->SignalIcon))
+			return ($mon->SignalIcon*20).'%';
+
+		return 'n/a';
 	}
 
 	// SIM
@@ -379,9 +384,9 @@ class HiLink {
 			$out = "";
 			$out .= "System-Status:       ".$this->getSystemStatus().PHP_EOL;
 			$out .= "Roaming:             ".$this->getRoamingStatus().PHP_EOL;
-			$out .= "Connection-)tatus:   ".$this->getConnectionStatus().PHP_EOL;
+			$out .= "Connection-Status:   ".$this->getConnectionStatus().PHP_EOL;
 			$out .= "Connection-Type:     ".$this->getConnectionType().PHP_EOL;
-			$out .= "Connection-Strength: ".$this->getSignalStrength().PHP_EOL;
+			$out .= "Signal-Strength:     ".$this->getSignalStrength().PHP_EOL;
 			$out .= "IPv4 - Provider:     ".$this->getProviderIp().PHP_EOL;
 			$out .= "IPv4 - external:     ".$this->getExternalIp().PHP_EOL;
 			$out .= "IPv4 - DNS (1):      ".$this->getDnsServer().PHP_EOL;
@@ -678,11 +683,6 @@ class HiLink {
 		return ''.$dev->WebUIVersion;
 	}
 
-	public function getUptime() {
-		$dev = $this->getDevice();
-		return $this->getTime($dev->Uptime);
-	}
-
 	public function getMAC($interface = 1) {
 		$dev = $this->getDevice();
 		if ($interface == 2) {
@@ -704,7 +704,6 @@ class HiLink {
 				"hw"     => $this->getHardwareVersion(),
 				"sw"     => $this->getSoftwareVersion(),
 				"ui"     => $this->getGuiVersion(),
-				"uptime" => $this->getUptime(),
 				"mac"    => $this->getMAC(),
 			);
 		} else {
@@ -718,7 +717,6 @@ class HiLink {
 			$out .= "HW Version:   ".$this->getHardwareVersion().PHP_EOL;
 			$out .= "SW Version:   ".$this->getSoftwareVersion().PHP_EOL;
 			$out .= "UI Version:   ".$this->getGuiVersion().PHP_EOL;
-			$out .= "Uptime:       ".$this->getUptime().PHP_EOL;
 			$out .= "MAC:          ".$this->getMAC().PHP_EOL;
 			return $out;
 		}
@@ -1102,8 +1100,6 @@ class HiLink {
 		$req->addChild('Reserved', 1);
 		$req->addChild('Date', date('Y-m-d H:i:s'));
 
-//		return true;  // backup return to prohibit high costs
-
 		$ch = $this->our_curl_init(
 			$this->host.'/api/sms/send-sms',
 			array(
@@ -1116,7 +1112,6 @@ class HiLink {
 		curl_close($ch);
 
 		$res = simplexml_load_string($ret);
-
 		return ($res[0] == "OK");
 	}
 
@@ -1137,21 +1132,23 @@ class HiLink {
 	private function getSesToken() {
 		$ch = curl_init($this->host.'/api/webserver/SesTokInfo');
 		curl_setopt($ch,CURLOPT_RETURNTRANSFER,1);
+
+		if (!empty($this->session))
+			curl_setopt($ch,CURLOPT_COOKIE,$this->session);
+
 		$res = curl_exec($ch);
 		curl_close($ch);
 
 		if ($xml = simplexml_load_string($res)) {
 			$this->session = $xml->SesInfo;
 			$this->token = $xml->TokInfo;
+			$this->tokupdt = time();
 			return true;
 		}
 		return false;
 	}
 
 	private function getToken() {
-		if ($this->token) 
-			return $this->token;
-
 		if ($this->getSesToken()) 
 			return $this->token;
 
@@ -1159,7 +1156,7 @@ class HiLink {
 	}
 
 	private function getSession() {
-		if ($this->session) 
+		if (!empty($this->session))
 			return $this->session;
 
 		if ($this->getSesToken())
@@ -1177,7 +1174,7 @@ class HiLink {
 		curl_setopt($ch,CURLOPT_RETURNTRANSFER,1);
 		curl_setopt($ch,CURLOPT_COOKIE,$this->getSession().';');
 		if ($addToken) {
-			curl_setopt($ch,CURLOPT_HTTPHEADER,array('__RequestVerificationToken: '.$this->token));
+			curl_setopt($ch,CURLOPT_HTTPHEADER,array('__RequestVerificationToken: '.$this->getToken()));
 		}
 		return $ch;
 	}
