@@ -1,20 +1,26 @@
 <?php
 /*
+/**
  * hilink.class.php
  *
- * Author Klaus Gottschalk <klaus@kgem.de>
- *   based of work of Andreas Mueller <webmaster@am-wd.de> and others - see githup
+ * @author Andreas Mueller <webmaster@am-wd.de>
+ * @version 1.0-20140703
  *
- * Description:
+ * @description
  * This class tries to fully control an UMTS Stick from Huawei
  * with an HiLink Webinterface
+ *
+ * functionality tested with Huawei E303
+ * Link: http://www.huaweidevices.de/e303
+ * hilink.class.php
  *
  * Functionality tested with Huawei E3372
  * HW Version:   CL2E3372HM
  * SW Version:   22.315.01.00.1080
  * UI Version:   17.100.13.02.1080
  *
- */
+ **/
+namespace AMWD;
 
 @error_reporting(0);
 
