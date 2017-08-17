@@ -66,38 +66,25 @@ class HiLink {
 		return $this->host;
 	}
 
-	// check if server (HiLink host) is reachable
-	public function online($server = '', $timeout = 1) {
+        // check if server (HiLink host) is reachable
+        public function online($server = '', $timeout = 1) {
 		if (empty($server))
-				$server = $this->host;
+			$server = $this->host;
 
-		$sys = $this->getSystem();
-		switch ($sys) {
-			case "win":
-				$cmd = "ping -n 1 -w ".($timeout * 100)." ".$server;
-				break;
-			case "mac":
-				$cmd = "ping -c 1 -t ".$timeout." ".$server." 2> /dev/null";
-				break;
-			case "lnx":
-				$cmd = "ping -c 1 -W ".$timeout." ".$server." 2> /dev/null";
-				break;
-			default:
-				return false;
-		}
-		$res = exec($cmd, $out, $ret);
+		$ch = curl_init('http://'.$server.'/html/index.html');
 
-		if ($ret == 0) {
-			$ch = $this->our_curl_init('http://'.$server.'/html/index.html');
-			$res = curl_exec($ch);
-			curl_close($ch);
+		# set connect timeout on channel
+		curl_setopt($ch,CURLOPT_RETURNTRANSFER,1);
+		curl_setopt($ch,CURLOPT_CONNECTTIMEOUT,$timeout);
 
-			if (strstr($res, 'hilink'))
-				return true;
-		}
+		$res = curl_exec($ch);
+		curl_close($ch);
+
+		if (strstr($res, 'hilink'))
+			return true;
+
 		return false;
 	}
-
 
 	// url to check external ip
 	public function setIpCheck($url) {
@@ -1183,14 +1170,6 @@ class HiLink {
 			curl_setopt($ch,CURLOPT_HTTPHEADER,array('__RequestVerificationToken: '.$this->getToken()));
 		}
 		return $ch;
-	}
-
-	private function getSystem() {
-		if (substr(__DIR__,0,1) == '/') {
-			return (exec('uname') == 'Darwin') ? 'mac' : 'lnx';
-		} else {
-			return 'win';
-		}
 	}
 
 	private function getTime($time) {
